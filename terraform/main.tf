@@ -120,7 +120,7 @@ resource "aws_instance" "minecraft" {
   tags = { Name = "minecraft-server" }
 
   # Attach EBS volume and use cloud-init to create mountpoint and install Ansible bootstrap
-  user_data = file("${path.module}/cloud-init/bootstrap.sh")
+  user_data = file("${path.module}/../cloud-init/bootstrap.sh")
 }
 
 # Attach EBS to instance
