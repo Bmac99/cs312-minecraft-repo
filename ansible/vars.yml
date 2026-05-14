@@ -1,0 +1,37 @@
+---
+# ── Ansible Variables ─────────────────────────────────────────────────────────
+# Replace every value marked  ← REPLACE  before running the playbook.
+
+# AWS
+aws_region: "us-west-2"
+ecr_registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com"   # ← REPLACE account id
+ecr_repo: "your-ecr-repo"                                        # ← REPLACE
+image_tag: "{{ lookup('env', 'MINECRAFT_IMAGE_TAG') | default('latest') }}"
+full_image: "{{ ecr_registry }}/{{ ecr_repo }}:{{ image_tag }}"
+
+# S3 world storage
+s3_bucket: "your-minecraft-world-bucket"                         # ← REPLACE
+s3_world_prefix: "worlds/world"                                  # path inside the bucket
+restore_from_s3: false                                           # set true to restore on deploy
+
+# Container
+container_name: "minecraft"
+data_dir: "/data"
+minecraft_port: 25565
+java_mem_initial: "2G"
+java_mem_max: "4G"
+eula: "TRUE"
+
+# Extra environment variables passed to the container (add/remove freely)
+container_env:
+  EULA: "{{ eula }}"
+  MEMORY: "{{ java_mem_max }}"
+  TYPE: "VANILLA"
+  VERSION: "LATEST"
+  # LEVEL: "world"         # uncomment to pin world name
+
+# Docker restart policy
+restart_policy: "unless-stopped"
+
+# IAM instance profile (used for ECR auth & S3 access – no static creds needed)
+instance_profile: "LabInstanceProfile"

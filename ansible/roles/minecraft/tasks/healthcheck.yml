@@ -1,0 +1,19 @@
+---
+# Polls the Minecraft container logs until the server signals readiness,
+# or fails after a configurable timeout.
+
+- name: Wait for Minecraft server to report 'Done' in logs
+  ansible.builtin.command: >
+    docker logs {{ container_name }} 2>&1
+  register: mc_logs
+  until: >
+    'Done' in mc_logs.stdout or
+    'Starting Minecraft server' in mc_logs.stdout
+  retries: 30
+  delay: 10
+  changed_when: false
+  become: true
+
+- name: Print last 20 log lines for audit
+  ansible.builtin.debug:
+    msg: "{{ mc_logs.stdout_lines[-20:] }}"

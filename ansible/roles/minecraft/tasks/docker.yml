@@ -1,0 +1,69 @@
+---
+# Installs Docker CE and AWS CLI v2 – idempotent via package state=present
+# and explicit version-pin guard.
+
+- name: Install required system packages
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+      - unzip
+      - curl
+    state: present
+  become: true
+
+- name: Add Docker CE repository
+  ansible.builtin.command:
+    cmd: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    creates: /etc/yum.repos.d/docker-ce.repo
+  become: true
+
+- name: Install Docker CE
+  ansible.builtin.yum:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+  become: true
+
+- name: Ensure Docker service is enabled and started
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+  become: true
+
+- name: Add ec2-user to docker group
+  ansible.builtin.user:
+    name: ec2-user
+    groups: docker
+    append: true
+  become: true
+
+- name: Check whether AWS CLI v2 is already installed
+  ansible.builtin.command: aws --version
+  register: aws_cli_version
+  changed_when: false
+  failed_when: false
+
+- name: Download AWS CLI v2 installer
+  ansible.builtin.get_url:
+    url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    dest: /tmp/awscliv2.zip
+    mode: "0644"
+  when: aws_cli_version.rc != 0
+
+- name: Unzip AWS CLI v2 installer
+  ansible.builtin.unarchive:
+    src: /tmp/awscliv2.zip
+    dest: /tmp/
+    remote_src: true
+  when: aws_cli_version.rc != 0
+
+- name: Install AWS CLI v2
+  ansible.builtin.command: /tmp/aws/install
+  become: true
+  when: aws_cli_version.rc != 0
+  changed_when: true

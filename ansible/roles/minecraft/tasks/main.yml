@@ -1,0 +1,24 @@
+---
+# Entry point – imports sub-tasks in dependency order.
+# Every sub-task is idempotent: safe to re-run at any time.
+
+- name: Install Docker and AWS CLI
+  ansible.builtin.import_tasks: docker.yml
+  tags: [docker]
+
+- name: Authenticate to ECR
+  ansible.builtin.import_tasks: ecr_auth.yml
+  tags: [ecr]
+
+- name: Restore world from S3 (conditional)
+  ansible.builtin.import_tasks: restore.yml
+  when: restore_from_s3 | bool
+  tags: [restore]
+
+- name: Pull image and start container
+  ansible.builtin.import_tasks: container.yml
+  tags: [container]
+
+- name: Run health check
+  ansible.builtin.import_tasks: healthcheck.yml
+  tags: [healthcheck]

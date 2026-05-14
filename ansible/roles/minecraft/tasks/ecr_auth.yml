@@ -1,0 +1,18 @@
+---
+# Authenticates Docker to ECR using the EC2 instance profile (LabInstanceProfile).
+# No static credentials are used – IMDSv2 provides temporary tokens automatically.
+
+- name: Get ECR login password via AWS CLI (instance-profile auth)
+  ansible.builtin.command: >
+    aws ecr get-login-password --region {{ aws_region }}
+  register: ecr_password
+  changed_when: false
+  no_log: true  # suppress token from logs
+
+- name: Log Docker into ECR
+  community.docker.docker_login:
+    registry_url: "{{ ecr_registry }}"
+    username: "AWS"
+    password: "{{ ecr_password.stdout }}"
+    reauthorize: true
+  no_log: true

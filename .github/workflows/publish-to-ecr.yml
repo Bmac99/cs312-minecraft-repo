@@ -1,0 +1,155 @@
+# ── GitHub Actions: Build/Retag & Publish to ECR ─────────────────────────────
+# Triggers on git tag push matching v* (e.g. v1.2.3).
+#
+# Auth options (choose ONE and delete the other):
+# ── OPTION A: GitHub OIDC (recommended, no long-lived secrets) ────────────────
+#   1. In AWS IAM create an OIDC identity provider:
+#      Provider URL : https://token.actions.githubusercontent.com
+#      Audience     : sts.amazonaws.com
+#   2. Create an IAM role (e.g. GitHubActionsECRRole) with trust policy:
+#      {
+#        "Principal": {
+#          "Federated": "arn:aws:iam::<ACCOUNT>:oidc-provider/token.actions.githubusercontent.com"
+#        },
+#        "Action": "sts:AssumeRoleWithWebIdentity",
+#        "Condition": {
+#          "StringLike": {
+#            "token.actions.githubusercontent.com:sub": "repo:<ORG>/<REPO>:*"
+#          }
+#        }
+#      }
+#   3. Attach AmazonEC2ContainerRegistryPowerUser to that role.
+#   4. Set repo variable: AWS_ROLE_ARN = arn:aws:iam::<ACCOUNT>:role/GitHubActionsECRRole
+#
+# ── OPTION B: Static secrets ──────────────────────────────────────────────────
+#   Set repository secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   Then swap the aws-actions/configure-aws-credentials step below.
+
+name: Publish Minecraft image to ECR
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}         # e.g. 123456789012.dkr.ecr.us-west-2.amazonaws.com
+  ECR_REPOSITORY: your-ecr-repo                      # ← REPLACE or use a var/secret
+  UPSTREAM_IMAGE: itzg/minecraft-server              # upstream to retag (or set to "" to build from Dockerfile)
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  publish:
+    name: Build / Retag and Push to ECR
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract tag name
+        id: meta
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Image tag will be: ${TAG}"
+
+      # ── OPTION A (OIDC) ───────────────────────────────────────────────────
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # ── OPTION B (static secrets – uncomment & delete the block above) ────
+      # - name: Configure AWS credentials (static)
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Pull upstream and retag (no Dockerfile needed) ────────────────────
+      - name: Pull upstream Minecraft image
+        if: env.UPSTREAM_IMAGE != ''
+        run: |
+          docker pull ${{ env.UPSTREAM_IMAGE }}:latest
+
+      - name: Tag and push to ECR
+        if: env.UPSTREAM_IMAGE != ''
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          FULL="${ECR_REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+          docker tag ${{ env.UPSTREAM_IMAGE }}:latest "${FULL}"
+          docker push "${FULL}"
+          echo "Pushed: ${FULL}"
+
+      # ── Build from Dockerfile (uncomment if you maintain a custom image) ──
+      # - name: Build and push custom image
+      #   if: env.UPSTREAM_IMAGE == ''
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     push: true
+      #     tags: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+
+  smoke-test:
+    name: Smoke-test container
+    runs-on: ubuntu-latest
+    needs: publish
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run smoke-test container
+        env:
+          TAG: ${{ needs.publish.outputs.image_tag }}
+        run: |
+          FULL="${ECR_REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+          docker run -d \
+            --name mc-smoke \
+            -e EULA=TRUE \
+            -e TYPE=VANILLA \
+            -e VERSION=LATEST \
+            -e ONLINE_MODE=FALSE \
+            -p 25565:25565 \
+            "${FULL}"
+
+      - name: Wait for server initialization (max 3 min)
+        run: |
+          echo "Polling container logs..."
+          for i in $(seq 1 36); do
+            LOGS=$(docker logs mc-smoke 2>&1)
+            if echo "$LOGS" | grep -qE "Done|Starting Minecraft server"; then
+              echo "✅ Server initialization confirmed."
+              docker logs mc-smoke 2>&1 | tail -20
+              exit 0
+            fi
+            echo "  attempt ${i}/36 – waiting 5s..."
+            sleep 5
+          done
+          echo "❌ Server did not initialize within 3 minutes."
+          docker logs mc-smoke 2>&1 | tail -40
+          exit 1
+
+      - name: Cleanup smoke-test container
+        if: always()
+        run: docker rm -f mc-smoke || true

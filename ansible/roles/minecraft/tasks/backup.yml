@@ -1,0 +1,28 @@
+---
+# Run separately (--tags backup) to push the live world to S3.
+# Stops the container briefly for consistency, syncs, then restarts.
+
+- name: Stop container for consistent snapshot
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    state: stopped
+  become: true
+
+- name: Sync world to S3
+  ansible.builtin.command: >
+    aws s3 sync {{ data_dir }}/world/
+    s3://{{ s3_bucket }}/{{ s3_world_prefix }}/
+    --region {{ aws_region }}
+    --delete
+  become: true
+  changed_when: true
+
+- name: Restart container after backup
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    state: started
+  become: true
+
+- name: Record backup timestamp
+  ansible.builtin.debug:
+    msg: "Backup completed at {{ ansible_date_time.iso8601 }}"

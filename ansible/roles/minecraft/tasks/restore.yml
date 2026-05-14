@@ -1,0 +1,34 @@
+---
+# Downloads the world archive from S3 and extracts it into {{ data_dir }}.
+# Runs ONLY when restore_from_s3=true is passed to the playbook.
+# Idempotent: a marker file prevents double-restore within the same deploy.
+
+- name: Ensure data directory exists
+  ansible.builtin.file:
+    path: "{{ data_dir }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Check whether restore has already run this deploy
+  ansible.builtin.stat:
+    path: "{{ data_dir }}/.restore_complete"
+  register: restore_marker
+
+- name: Download world archive from S3
+  ansible.builtin.command: >
+    aws s3 sync s3://{{ s3_bucket }}/{{ s3_world_prefix }}/ {{ data_dir }}/world/
+    --region {{ aws_region }}
+  become: true
+  when: not restore_marker.stat.exists
+  changed_when: true
+
+- name: Write restore marker
+  ansible.builtin.file:
+    path: "{{ data_dir }}/.restore_complete"
+    state: touch
+    mode: "0444"
+  become: true
+  when: not restore_marker.stat.exists
