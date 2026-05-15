@@ -2,11 +2,11 @@
 # ── Minecraft EC2 Playbook ────────────────────────────────────────────────────
 # Usage (fresh deploy):
 #   ansible-playbook -i inventory/hosts.example playbook.yml \
-#     -e "image_tag=<tag>"
+#     -e "image_tag=latest"
 #
 # Usage (restore world from S3 before start):
 #   ansible-playbook -i inventory/hosts.example playbook.yml \
-#     -e "image_tag=<tag> restore_from_s3=true"
+#     -e "image_tag=latest restore_from_s3=true"
 #
 # Usage (backup only):
 #   ansible-playbook -i inventory/hosts.example playbook.yml --tags backup
@@ -14,7 +14,7 @@
 # After `terraform apply`, grab the public IP:
 #   export MC_IP=$(terraform output -raw minecraft_public_ip)
 #   ansible-playbook -i inventory/hosts.example playbook.yml \
-#     -e "ansible_host=${MC_IP} image_tag=${MINECRAFT_IMAGE_TAG}"
+#     -e "ansible_host=${MC_IP} image_tag=latest"
 
 - name: Configure Minecraft EC2 server
   hosts: minecraft
@@ -30,7 +30,7 @@
         msg: >
           Connected to {{ inventory_hostname }}
           ({{ ansible_distribution }} {{ ansible_distribution_version }}).
-          Image: {{ full_image }}
+          Using Docker Hub image: {{ full_image }}
 
   roles:
     - role: minecraft
@@ -41,4 +41,5 @@
         msg: >
           Server ready.
           Connect via Minecraft at {{ ansible_host }}:{{ minecraft_port }}.
-          SSH: ssh -i ~/.ssh/your-key.pem ec2-user@{{ ansible_host }}
+          SSH: ssh -i ~/.ssh/your-key.pem ubuntu@{{ ansible_host }}
+

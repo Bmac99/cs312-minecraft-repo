@@ -2,13 +2,11 @@
 # Entry point – imports sub-tasks in dependency order.
 # Every sub-task is idempotent: safe to re-run at any time.
 
-- name: Install Docker and AWS CLI
+- name: Install Docker
   ansible.builtin.import_tasks: docker.yml
   tags: [docker]
 
-- name: Authenticate to ECR
-  ansible.builtin.import_tasks: ecr_auth.yml
-  tags: [ecr]
+# ECR authentication removed — no longer needed with Docker Hub
 
 - name: Restore world from S3 (conditional)
   ansible.builtin.import_tasks: restore.yml
@@ -22,3 +20,10 @@
 - name: Run health check
   ansible.builtin.import_tasks: healthcheck.yml
   tags: [healthcheck]
+
+# Disable backup by default — AWS Academy has no credentials
+- name: Backup world to S3
+  ansible.builtin.import_tasks: backup.yml
+  tags: [backup]
+  when: false
+

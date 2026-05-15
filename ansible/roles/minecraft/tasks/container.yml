@@ -1,13 +1,4 @@
 ---
-# Pulls the pinned image from ECR and starts/re-creates the Minecraft container.
-# Uses community.docker.docker_container for idempotent container management.
-
-- name: Pull Minecraft image from ECR
-  community.docker.docker_image:
-    name: "{{ full_image }}"
-    source: pull
-    force_source: true  # always check for newer digest matching the tag
-
 - name: Ensure data directory exists
   ansible.builtin.file:
     path: "{{ data_dir }}"
@@ -26,8 +17,6 @@
     volumes:
       - "{{ data_dir }}:/data"
     env: "{{ container_env }}"
-    # Healthcheck built into the container definition (see Dockerfile);
-    # override here if needed:
     healthcheck:
       test: ["CMD", "mc-monitor", "status", "--host", "localhost"]
       interval: 30s
@@ -51,3 +40,4 @@
     env: "{{ container_env }}"
   become: true
   when: container_result.changed
+

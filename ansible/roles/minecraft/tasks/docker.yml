@@ -1,69 +1,99 @@
 ---
-# Installs Docker CE and AWS CLI v2 – idempotent via package state=present
-# and explicit version-pin guard.
+# -----------------------------
+# Docker installation (Ubuntu 24.04+ / 26.04)
+# -----------------------------
 
-- name: Install required system packages
-  ansible.builtin.yum:
+- name: Install required system packages (Ubuntu)
+  apt:
     name:
-      - yum-utils
-      - device-mapper-persistent-data
-      - lvm2
-      - unzip
+      - apt-transport-https
+      - ca-certificates
       - curl
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Install APT HTTPS support packages
+  apt:
+    name:
+      - software-properties-common
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Download Docker GPG key (modern Ubuntu method)
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.gpg
+    mode: '0644'
+  become: true
+
+- name: Add Docker repository (modern signed-by syntax)
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
     state: present
   become: true
 
-- name: Add Docker CE repository
-  ansible.builtin.command:
-    cmd: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-    creates: /etc/yum.repos.d/docker-ce.repo
-  become: true
-
-- name: Install Docker CE
-  ansible.builtin.yum:
+- name: Install Docker Engine
+  apt:
     name:
       - docker-ce
       - docker-ce-cli
       - containerd.io
     state: present
+    update_cache: yes
   become: true
 
 - name: Ensure Docker service is enabled and started
-  ansible.builtin.systemd:
+  systemd:
     name: docker
     enabled: true
     state: started
   become: true
 
-- name: Add ec2-user to docker group
-  ansible.builtin.user:
-    name: ec2-user
+- name: Add ubuntu to docker group
+  user:
+    name: ubuntu
     groups: docker
     append: true
   become: true
 
+# -----------------------------
+# AWS CLI v2 installation
+# -----------------------------
+
 - name: Check whether AWS CLI v2 is already installed
-  ansible.builtin.command: aws --version
+  command: aws --version
   register: aws_cli_version
   changed_when: false
   failed_when: false
 
 - name: Download AWS CLI v2 installer
-  ansible.builtin.get_url:
+  get_url:
     url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     dest: /tmp/awscliv2.zip
     mode: "0644"
   when: aws_cli_version.rc != 0
 
 - name: Unzip AWS CLI v2 installer
-  ansible.builtin.unarchive:
+  unarchive:
     src: /tmp/awscliv2.zip
     dest: /tmp/
     remote_src: true
   when: aws_cli_version.rc != 0
 
 - name: Install AWS CLI v2
-  ansible.builtin.command: /tmp/aws/install
+  command: /tmp/aws/install
   become: true
   when: aws_cli_version.rc != 0
   changed_when: true
+

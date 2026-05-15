@@ -1,37 +1,35 @@
 ---
 # ── Ansible Variables ─────────────────────────────────────────────────────────
-# Replace every value marked  ← REPLACE  before running the playbook.
 
-# AWS
+# AWS region (still used for S3 backups)
 aws_region: "us-west-2"
-ecr_registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com"   # ← REPLACE account id
-ecr_repo: "your-ecr-repo"                                        # ← REPLACE
+
+# Docker Hub image (replaces all ECR variables)
 image_tag: "{{ lookup('env', 'MINECRAFT_IMAGE_TAG') | default('latest') }}"
-full_image: "{{ ecr_registry }}/{{ ecr_repo }}:{{ image_tag }}"
+full_image: "mccabria/minecraft-server:{{ image_tag }}"
 
-# S3 world storage
-s3_bucket: "your-minecraft-world-bucket"                         # ← REPLACE
-s3_world_prefix: "worlds/world"                                  # path inside the bucket
-restore_from_s3: false                                           # set true to restore on deploy
+# S3 world storage (still used for restore/backup)
+s3_bucket: "your-minecraft-world-bucket"     # ← replace with your bucket
+s3_world_prefix: "worlds/world"
+restore_from_s3: false
 
-# Container
+# Container settings
 container_name: "minecraft"
-data_dir: "/data"
+data_dir: "/opt/minecraft/data"
 minecraft_port: 25565
+
+# Java / server environment
 java_mem_initial: "2G"
 java_mem_max: "4G"
 eula: "TRUE"
 
-# Extra environment variables passed to the container (add/remove freely)
 container_env:
   EULA: "{{ eula }}"
   MEMORY: "{{ java_mem_max }}"
   TYPE: "VANILLA"
   VERSION: "LATEST"
-  # LEVEL: "world"         # uncomment to pin world name
+  MOTD: "Brian McCarthy - CS312 Minecraft Server"
 
 # Docker restart policy
 restart_policy: "unless-stopped"
 
-# IAM instance profile (used for ECR auth & S3 access – no static creds needed)
-instance_profile: "LabInstanceProfile"
